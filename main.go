@@ -2,55 +2,19 @@ package main
 
 import (
 	"bufio"
-	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"pass-generator/internal/settings"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"pass-generator/internal/password"
+
 	"github.com/atotto/clipboard"
 )
-
-type Config struct {
-	Length  int    `json:"length"`
-	Exclude string `json:"exclude"`
-}
-
-func generatePassword(length int, exclude string) (string, error) {
-	if length <= 0 {
-		return "", fmt.Errorf("длина должна быть больше нуля")
-
-	}
-	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-	// Проверяем какие символы разрешены
-	allowed := make([]byte, 0, len(alphabet))
-	for idx, value := range alphabet {
-		if !strings.Contains(exclude, string(value)) {
-			allowed = append(allowed, alphabet[idx])
-		}
-	}
-	if len(allowed) == 0 {
-		return "", fmt.Errorf("все доступные символы исключены")
-	}
-
-	// Генерируем пароль
-	bytes := make([]byte, length)
-	for i := range bytes {
-		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(allowed))))
-		if err != nil {
-			return "", err
-		}
-		bytes[i] = allowed[index.Int64()]
-	}
-	return string(bytes), nil
-}
 
 /*
 true, nil — пользователь хочет закрыть приложение;
@@ -151,47 +115,6 @@ func savePassword(path string, password string) error {
 	return file.Close()
 }
 
-func saveSettings(path string, config Config) error {
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(path, data, 0600)
-	return err
-}
-
-func settingsPath() (string, error) {
-	baseDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-
-	dir := filepath.Join(baseDir, "PassGenerator")
-	err = os.MkdirAll(dir, 0700)
-	if err != nil {
-		return "", err
-	}
-	result := filepath.Join(dir, "settings.json")
-	return result, nil
-}
-
-func loadSettings(path string) (Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return Config{}, err
-	}
-	var config Config
-
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return Config{}, err
-	}
-	if config.Length <= 0 {
-		return Config{}, fmt.Errorf("length must be greater than 0")
-	}
-	return config, nil
-}
-
 func clearScreen() error {
 	goos := runtime.GOOS
 	if goos == "windows" {
@@ -206,18 +129,20 @@ func clearScreen() error {
 }
 
 func main() {
-	config := Config{
+	config := password.Config{
 		Length:  16,
 		Exclude: "",
 	}
 
-	configPath, err := settingsPath()
+	configPath, err := settings.UserPath()
+	store := settings.New(configPath)
+
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	loadedConfig, err := loadSettings(configPath)
+	loadedConfig, err := store.Load()
 	message := ""
 
 	if err == nil {
@@ -256,13 +181,13 @@ func main() {
 
 		switch input {
 		case "1":
-			password, err := generatePassword(config.Length, config.Exclude)
+			pass, err := password.Generate(config.Length, config.Exclude)
 			if err != nil {
 				message = fmt.Sprint("Не удалось создать пароль: ", err)
 				continue
 			}
 
-			shouldExit, err := passwordMenu(reader, password)
+			shouldExit, err := passwordMenu(reader, pass)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -293,7 +218,7 @@ func main() {
 				continue
 			}
 			config.Length = newLength
-			err = saveSettings(configPath, config)
+			err = store.Save(config)
 			if err != nil {
 				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
@@ -322,7 +247,7 @@ Enter — очистить исключения.
 				input = "0"
 			}
 			config.Exclude = input
-			err = saveSettings(configPath, config)
+			err = store.Save(config)
 			if err != nil {
 				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
