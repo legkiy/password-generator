@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/atotto/clipboard"
 )
 
 type Config struct {
@@ -53,34 +55,81 @@ false, err — произошла ошибка чтения.
 func passwordMenu(reader *bufio.Reader, password string) (bool, error) {
 	fmt.Println(password)
 	for {
-		fmt.Printf(`1: Скопировать в буфер обмена
+		fmt.Printf(`
+1: Скопировать в буфер обмена
 2: Сохранить в файл
 3: Вернуться в главное меню
 
 0: Закрыть приложение
-`)
+
+Ваш выбор: `)
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
 			return false, err
 		}
 		input = strings.TrimSpace(input)
 
 		switch input {
 		case "1":
-			fmt.Println("Скоро добавим")
+			err := copyPassword(password)
+			if err != nil {
+				fmt.Println("Не удалось скопировать пароль. ", err)
+				continue
+			}
+			fmt.Println("Пароль скопирован")
+
 		case "2":
-			fmt.Println("Скоро добавим")
+			fmt.Println(`Введите путь к новому файлу, например password.txt.
+Enter — вернуться в подменю.
+0 — закрыть приложение.`)
+
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return false, err
+			}
+
+			input = strings.TrimSpace(input)
+			if input == "0" {
+				return true, nil
+			}
+			if len(input) == 0 {
+				continue
+			}
+			err = savePassword(input, password)
+			if err != nil {
+				fmt.Println("Не удалось сохранить пароль", err)
+				continue
+			}
+			fmt.Println("Пароль сохранён в файл: ", input)
 		case "3":
-				fmt.Println("Скоро добавим")
+			return false, nil
 		case "0":
 			return true, nil
 		default:
 			fmt.Println("Неизвестный пункт меню")
 		}
-		}
 	}
+}
+
+func copyPassword(password string) error {
+	err := clipboard.WriteAll(password)
+	return err
+}
+
+func savePassword(path string, password string) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(password)
+	if err != nil {
+		return err
+	}
+	return file.Close()
 }
 
 func main() {
@@ -92,7 +141,8 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Printf(`1: Создать пароль
+		fmt.Printf(`
+1: Создать пароль
 2: Задать длину пароля (%d)
 3: Символы исключения (%s)
 
@@ -113,7 +163,15 @@ func main() {
 				fmt.Println(err)
 				continue
 			}
-			fmt.Println(password)
+
+			shouldExit, err := passwordMenu(reader, password)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			if shouldExit {
+				return
+			}
 		case "2":
 			fmt.Print("Введите длину пароля (0 — закрыть приложение):")
 
