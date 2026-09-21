@@ -3,9 +3,12 @@ package main
 import (
 	"bufio"
 	"crypto/rand"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -132,10 +135,64 @@ func savePassword(path string, password string) error {
 	return file.Close()
 }
 
+func saveSettings(path string, config Config) error {
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(path, data, 0600)
+	return err
+}
+
+func settingsPath() (string, error) {
+	baseDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	dir := filepath.Join(baseDir, "PassGenerator")
+	err = os.MkdirAll(dir, 0700)
+	if err != nil {
+		return "", err
+	}
+	result := filepath.Join(dir, "settings.json")
+	return result, nil
+}
+
+func loadSettings(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	var config Config
+
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return Config{}, err
+	}
+	if config.Length <= 0 {
+		return Config{}, fmt.Errorf("length must be greater than 0")
+	}
+	return config, nil
+}
+
 func main() {
 	config := Config{
 		Length:  16,
 		Exclude: "",
+	}
+
+	configPath, err := settingsPath()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	loadedConfig, err := loadSettings(configPath)
+	if err == nil {
+		config = loadedConfig
+	} else if !errors.Is(err, os.ErrNotExist) {
+		fmt.Println("Не удалось загрузить настройки, используются значения по умолчанию:", err)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -190,6 +247,11 @@ func main() {
 				continue
 			}
 			config.Length = newLength
+			err = saveSettings(configPath, config)
+			if err != nil {
+				fmt.Println("Настройки изменены только для текущего запуска: ", err)
+			}
+
 		case "3":
 			fmt.Println(`Введите исключаемые символы, например 0O1lI.
 Enter — очистить исключения.
@@ -209,6 +271,10 @@ Enter — очистить исключения.
 				input = "0"
 			}
 			config.Exclude = input
+			err = saveSettings(configPath, config)
+			if err != nil {
+				fmt.Println("Настройки изменены только для текущего запуска: ", err)
+			}
 
 		case "0":
 			return
