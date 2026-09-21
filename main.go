@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -56,9 +58,18 @@ false, nil — вернуться в главное меню;
 false, err — произошла ошибка чтения.
 */
 func passwordMenu(reader *bufio.Reader, password string) (bool, error) {
-	fmt.Println(password)
+	message := ""
 	for {
-		fmt.Printf(`
+		err := clearScreen()
+		if err != nil {
+			return false, err
+		}
+		fmt.Println("Пароль: ", password)
+		if message != "" {
+			fmt.Println(message)
+			message = ""
+		}
+		fmt.Print(`
 1: Скопировать в буфер обмена
 2: Сохранить в файл
 3: Вернуться в главное меню
@@ -77,12 +88,17 @@ func passwordMenu(reader *bufio.Reader, password string) (bool, error) {
 		case "1":
 			err := copyPassword(password)
 			if err != nil {
-				fmt.Println("Не удалось скопировать пароль. ", err)
+				message = fmt.Sprint("Не удалось скопировать пароль: ", err)
 				continue
 			}
-			fmt.Println("Пароль скопирован")
+			message = "Пароль скопирован"
 
 		case "2":
+			err := clearScreen()
+			if err != nil {
+				fmt.Println("Не удалось очистить экран:", err)
+				return false, err
+			}
 			fmt.Println(`Введите путь к новому файлу, например password.txt.
 Enter — вернуться в подменю.
 0 — закрыть приложение.`)
@@ -101,16 +117,16 @@ Enter — вернуться в подменю.
 			}
 			err = savePassword(input, password)
 			if err != nil {
-				fmt.Println("Не удалось сохранить пароль", err)
+				message = fmt.Sprint("Не удалось сохранить пароль: ", err)
 				continue
 			}
-			fmt.Println("Пароль сохранён в файл: ", input)
+			message = "Пароль сохранён в файл: " + input
 		case "3":
 			return false, nil
 		case "0":
 			return true, nil
 		default:
-			fmt.Println("Неизвестный пункт меню")
+			message = "Неизвестный пункт меню"
 		}
 	}
 }
@@ -176,6 +192,19 @@ func loadSettings(path string) (Config, error) {
 	return config, nil
 }
 
+func clearScreen() error {
+	goos := runtime.GOOS
+	if goos == "windows" {
+		cmd := exec.Command("cmd", "/c", "cls")
+		cmd.Stdout = os.Stdout
+		return cmd.Run()
+
+	} else {
+		_, err := fmt.Print("\x1b[2J\x1b[H")
+		return err
+	}
+}
+
 func main() {
 	config := Config{
 		Length:  16,
@@ -189,15 +218,26 @@ func main() {
 	}
 
 	loadedConfig, err := loadSettings(configPath)
+	message := ""
+
 	if err == nil {
 		config = loadedConfig
 	} else if !errors.Is(err, os.ErrNotExist) {
-		fmt.Println("Не удалось загрузить настройки, используются значения по умолчанию:", err)
+		message = fmt.Sprint("Не удалось загрузить настройки, используются значения по умолчанию: ", err)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
+		err := clearScreen()
+		if err != nil {
+			fmt.Println("Не удалось очистить экран:", err)
+			return
+		}
+		if message != "" {
+			fmt.Println(message)
+			message = ""
+		}
 		fmt.Printf(`
 1: Создать пароль
 2: Задать длину пароля (%d)
@@ -206,6 +246,7 @@ func main() {
 0: Закрыть приложение
 
 Ваш выбор: `, config.Length, config.Exclude)
+
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println(err)
@@ -217,7 +258,7 @@ func main() {
 		case "1":
 			password, err := generatePassword(config.Length, config.Exclude)
 			if err != nil {
-				fmt.Println(err)
+				message = fmt.Sprint("Не удалось создать пароль: ", err)
 				continue
 			}
 
@@ -230,6 +271,11 @@ func main() {
 				return
 			}
 		case "2":
+			err := clearScreen()
+			if err != nil {
+				fmt.Println("Не удалось очистить экран:", err)
+				return
+			}
 			fmt.Print("Введите длину пароля (0 — закрыть приложение):")
 
 			input, err := reader.ReadString('\n')
@@ -243,16 +289,21 @@ func main() {
 			}
 			newLength, err := strconv.Atoi(input)
 			if err != nil || newLength <= 0 {
-				fmt.Println("Введи корректное число > 0")
+				message = "Введите целое число больше нуля"
 				continue
 			}
 			config.Length = newLength
 			err = saveSettings(configPath, config)
 			if err != nil {
-				fmt.Println("Настройки изменены только для текущего запуска: ", err)
+				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
 
 		case "3":
+			err := clearScreen()
+			if err != nil {
+				fmt.Println("Не удалось очистить экран:", err)
+				return
+			}
 			fmt.Println(`Введите исключаемые символы, например 0O1lI.
 Enter — очистить исключения.
 0 — закрыть приложение.
@@ -273,13 +324,13 @@ Enter — очистить исключения.
 			config.Exclude = input
 			err = saveSettings(configPath, config)
 			if err != nil {
-				fmt.Println("Настройки изменены только для текущего запуска: ", err)
+				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
 
 		case "0":
 			return
 		default:
-			fmt.Println("Неизвестный пункт меню")
+			message = "Неизвестный пункт меню"
 		}
 
 	}
