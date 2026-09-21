@@ -33,15 +33,7 @@ func (app *App) Run() error {
 		Exclude: "",
 	}
 
-	configPath, err := settings.UserPath()
-	store := settings.New(configPath)
-
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-
-	loadedConfig, err := store.Load()
+	loadedConfig, err := app.store.Load()
 	message := ""
 
 	if err == nil {
@@ -115,7 +107,7 @@ func (app *App) Run() error {
 				continue
 			}
 			config.Length = newLength
-			err = store.Save(config)
+			err = app.store.Save(config)
 			if err != nil {
 				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
@@ -144,7 +136,7 @@ Enter — очистить исключения.
 				input = "0"
 			}
 			config.Exclude = input
-			err = store.Save(config)
+			err = app.store.Save(config)
 			if err != nil {
 				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
