@@ -2,37 +2,51 @@ package password
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
 )
 
+const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-=_+;:,.?"
+
+var errAllExcluded = errors.New("все доступные символы исключены")
+
+func allowedChars(exclude string) []byte {
+	allowed := make([]byte, 0, len(alphabet))
+	for i := 0; i < len(alphabet); i++ {
+		if !strings.ContainsRune(exclude, rune(alphabet[i])) {
+			allowed = append(allowed, alphabet[i])
+		}
+	}
+	return allowed
+}
+
+// ValidateExclude позволяет отклонить исключения до того, как они попадут в настройки.
+func ValidateExclude(exclude string) error {
+	if len(allowedChars(exclude)) == 0 {
+		return errAllExcluded
+	}
+	return nil
+}
+
 func Generate(length int, exclude string) (string, error) {
 	if length <= 0 {
 		return "", fmt.Errorf("длина должна быть больше нуля")
-
 	}
-	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-=_+;:,.?"
 
-	// Проверяем какие символы разрешены
-	allowed := make([]byte, 0, len(alphabet))
-	for idx, value := range alphabet {
-		if !strings.Contains(exclude, string(value)) {
-			allowed = append(allowed, alphabet[idx])
-		}
-	}
+	allowed := allowedChars(exclude)
 	if len(allowed) == 0 {
-		return "", fmt.Errorf("все доступные символы исключены")
+		return "", errAllExcluded
 	}
 
-	// Генерируем пароль
-	bytes := make([]byte, length)
-	for i := range bytes {
+	pass := make([]byte, length)
+	for i := range pass {
 		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(allowed))))
 		if err != nil {
 			return "", err
 		}
-		bytes[i] = allowed[index.Int64()]
+		pass[i] = allowed[index.Int64()]
 	}
-	return string(bytes), nil
+	return string(pass), nil
 }

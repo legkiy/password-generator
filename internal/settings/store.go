@@ -3,8 +3,8 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/legkiy/password-generator-cli/internal/password"
 	"os"
-	"pass-generator/internal/password"
 	"path/filepath"
 )
 
@@ -21,6 +21,10 @@ func New(path string) Store {
 }
 
 func (store Store) Save(config password.Config) error {
+	if err := password.ValidateExclude(config.Exclude); err != nil {
+		return err
+	}
+
 	fileConfig := jsonConfig{
 		Length:  config.Length,
 		Exclude: config.Exclude,
@@ -61,7 +65,10 @@ func (store Store) Load() (password.Config, error) {
 		return password.Config{}, err
 	}
 	if fileConfig.Length <= 0 {
-		return password.Config{}, fmt.Errorf("length must be greater than 0")
+		return password.Config{}, fmt.Errorf("длина должна быть больше нуля")
+	}
+	if err := password.ValidateExclude(fileConfig.Exclude); err != nil {
+		return password.Config{}, err
 	}
 
 	config := password.Config{

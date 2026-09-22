@@ -4,15 +4,17 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-	"pass-generator/internal/password"
-	"pass-generator/internal/settings"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
+
+	"github.com/legkiy/password-generator-cli/internal/password"
+	"github.com/legkiy/password-generator-cli/internal/settings"
 )
 
 type App struct {
@@ -27,7 +29,16 @@ func New(store settings.Store) *App {
 	}
 }
 
+// Run закрывает приложение без ошибки, когда ввод закончился: Ctrl-D и пустой пайп — штатный выход.
 func (app *App) Run() error {
+	err := app.run()
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
+
+func (app *App) run() error {
 	config := password.Config{
 		Length:  16,
 		Exclude: "",
@@ -43,9 +54,7 @@ func (app *App) Run() error {
 	}
 
 	for {
-		err := clearScreen()
-		if err != nil {
-			fmt.Println("Не удалось очистить экран:", err)
+		if err := clearScreen(); err != nil {
 			return err
 		}
 		if message != "" {
@@ -61,12 +70,10 @@ func (app *App) Run() error {
 
 Ваш выбор: `, config.Length, config.Exclude)
 
-		input, err := app.reader.ReadString('\n')
+		input, err := app.readLine()
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
-		input = strings.TrimSpace(input)
 
 		switch input {
 		case "1":
@@ -78,26 +85,21 @@ func (app *App) Run() error {
 
 			shouldExit, err := app.passwordMenu(pass)
 			if err != nil {
-				fmt.Println(err)
 				return err
 			}
 			if shouldExit {
 				return nil
 			}
 		case "2":
-			err := clearScreen()
-			if err != nil {
-				fmt.Println("Не удалось очистить экран:", err)
+			if err := clearScreen(); err != nil {
 				return err
 			}
 			fmt.Print("Введите длину пароля (0 — закрыть приложение):")
 
-			input, err := app.reader.ReadString('\n')
+			input, err := app.readLine()
 			if err != nil {
-				fmt.Println(err)
 				return err
 			}
-			input = strings.TrimSpace(input)
 			if input == "0" {
 				return nil
 			}
@@ -107,15 +109,12 @@ func (app *App) Run() error {
 				continue
 			}
 			config.Length = newLength
-			err = app.store.Save(config)
-			if err != nil {
+			if err := app.store.Save(config); err != nil {
 				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
 
 		case "3":
-			err := clearScreen()
-			if err != nil {
-				fmt.Println("Не удалось очистить экран:", err)
+			if err := clearScreen(); err != nil {
 				return err
 			}
 			fmt.Println(`Введите исключаемые символы, например 0O1lI.
@@ -123,21 +122,22 @@ Enter — очистить исключения.
 0 — закрыть приложение.
 Для исключения только нуля введите "0" с кавычками.`)
 
-			input, err := app.reader.ReadString('\n')
+			input, err := app.readLine()
 			if err != nil {
-				fmt.Println(err)
 				return err
 			}
-			input = strings.TrimSpace(input)
 			if input == "0" {
 				return nil
 			}
 			if input == `"0"` {
 				input = "0"
 			}
+			if err := password.ValidateExclude(input); err != nil {
+				message = fmt.Sprint("Исключения не сохранены: ", err)
+				continue
+			}
 			config.Exclude = input
-			err = app.store.Save(config)
-			if err != nil {
+			if err := app.store.Save(config); err != nil {
 				message = fmt.Sprint("Настройки изменены только для текущего запуска: ", err)
 			}
 
@@ -156,14 +156,13 @@ true, nil — пользователь хочет закрыть приложе�
 false, nil — вернуться в главное меню;
 false, err — произошла ошибка чтения.
 */
-func (app *App) passwordMenu(password string) (bool, error) {
+func (app *App) passwordMenu(pass string) (bool, error) {
 	message := ""
 	for {
-		err := clearScreen()
-		if err != nil {
+		if err := clearScreen(); err != nil {
 			return false, err
 		}
-		fmt.Println("Пароль: ", password)
+		fmt.Println("Пароль: ", pass)
 		if message != "" {
 			fmt.Println(message)
 			message = ""
@@ -177,45 +176,38 @@ func (app *App) passwordMenu(password string) (bool, error) {
 
 Ваш выбор: `)
 
-		input, err := app.reader.ReadString('\n')
+		input, err := app.readLine()
 		if err != nil {
 			return false, err
 		}
-		input = strings.TrimSpace(input)
 
 		switch input {
 		case "1":
-			err := copyPassword(password)
-			if err != nil {
+			if err := copyPassword(pass); err != nil {
 				message = fmt.Sprint("Не удалось скопировать пароль: ", err)
 				continue
 			}
 			message = "Пароль скопирован"
 
 		case "2":
-			err := clearScreen()
-			if err != nil {
-				fmt.Println("Не удалось очистить экран:", err)
+			if err := clearScreen(); err != nil {
 				return false, err
 			}
 			fmt.Println(`Введите путь к новому файлу, например password.txt.
 Enter — вернуться в подменю.
 0 — закрыть приложение.`)
 
-			input, err := app.reader.ReadString('\n')
+			input, err := app.readLine()
 			if err != nil {
 				return false, err
 			}
-
-			input = strings.TrimSpace(input)
 			if input == "0" {
 				return true, nil
 			}
 			if len(input) == 0 {
 				continue
 			}
-			err = savePassword(input, password)
-			if err != nil {
+			if err := savePassword(input, pass); err != nil {
 				message = fmt.Sprint("Не удалось сохранить пароль: ", err)
 				continue
 			}
@@ -228,6 +220,14 @@ Enter — вернуться в подменю.
 			message = "Неизвестный пункт меню"
 		}
 	}
+}
+
+func (app *App) readLine() (string, error) {
+	input, err := app.reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(input), nil
 }
 
 func copyPassword(password string) error {
@@ -255,8 +255,10 @@ func clearScreen() error {
 	if goos == "windows" {
 		cmd := exec.Command("cmd", "/c", "cls")
 		cmd.Stdout = os.Stdout
-		return cmd.Run()
-
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("не удалось очистить экран: %w", err)
+		}
+		return nil
 	} else {
 		_, err := fmt.Print("\x1b[2J\x1b[H")
 		return err

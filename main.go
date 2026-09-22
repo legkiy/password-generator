@@ -2,25 +2,23 @@ package main
 
 import (
 	"fmt"
-	"pass-generator/internal/cli"
-	"pass-generator/internal/settings"
+	"os"
+
+	"github.com/legkiy/password-generator-cli/internal/cli"
+	"github.com/legkiy/password-generator-cli/internal/settings"
 )
 
 func main() {
-
 	configPath, err := settings.UserPath()
-
 	if err != nil {
-		fmt.Println("Не удалось определить путь к настройкам: ", err)
-		return
+		fmt.Fprintln(os.Stderr, "Не удалось определить путь к настройкам:", err)
+		os.Exit(1)
 	}
 
-	settingsInst := settings.New(configPath)
-
-	app := cli.New(settingsInst)
+	app := cli.New(settings.New(configPath))
 
 	if err := app.Run(); err != nil {
-		fmt.Println("Ошибка работы приложения:", err)
+		fmt.Fprintln(os.Stderr, "Ошибка работы приложения:", err)
+		os.Exit(1)
 	}
-
 }

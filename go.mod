@@ -1,4 +1,4 @@
-module pass-generator
+module github.com/legkiy/password-generator-cli
 
 go 1.27
 
