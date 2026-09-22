@@ -59,6 +59,20 @@ jobs:
           tar -C release/linux-amd64 -czf "release/pass-generator_${VERSION}_linux-amd64.tar.gz" .
           zip -j "release/pass-generator_${VERSION}_windows-amd64.zip" release/windows-amd64/*
 
+          cat > release/release-notes.md <<'EOF'
+          ## Запуск
+
+          1. Скачайте архив для своей операционной системы и распакуйте его.
+          2. **macOS Apple Silicon (M1/M2/M3 и новее):** откройте `start.command` из архива `macos-arm64`.
+          3. **macOS Intel:** откройте `start.command` из архива `macos-amd64`.
+          4. **Windows:** откройте `start.bat` из архива `windows-amd64`.
+          5. **Linux:** в терминале выполните `chmod +x pass-generator` и затем `./pass-generator`.
+
+> На macOS появится предупреждение о непроверенном разработчике: приложение ещё не подписано сертификатом Apple. Нажмите правой кнопкой на `pass-generator`, выберите **Открыть** и подтвердите запуск. После этого запускайте `start.command`.
+
+Пароли не сохраняются в истории приложения. Сохраняются только длина и исключённые символы.
+          EOF
+
       - name: Опубликовать GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,11 +83,11 @@ jobs:
             gh release create "$VERSION" release/*.tar.gz release/*.zip \
               --target "$GITHUB_SHA" \
               --title "Password Generator $VERSION" \
-              --generate-notes \
+              --notes-file release/release-notes.md \
               --prerelease
           else
             gh release create "$VERSION" release/*.tar.gz release/*.zip \
               --target "$GITHUB_SHA" \
               --title "Password Generator $VERSION" \
-              --generate-notes
+              --notes-file release/release-notes.md
           fi
