@@ -12,7 +12,7 @@ func Generate(length int, exclude string) (string, error) {
 		return "", fmt.Errorf("длина должна быть больше нуля")
 
 	}
-	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-=_+;:,.?"
 
 	// Проверяем какие символы разрешены
 	allowed := make([]byte, 0, len(alphabet))
