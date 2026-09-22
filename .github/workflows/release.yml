@@ -65,17 +65,15 @@ jobs:
         run: |
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release upload "$VERSION" release/*.tar.gz release/*.zip --clobber
-          else
-            if [ "$PRERELEASE" = "true" ]; then
-              gh release create "$VERSION" release/*.tar.gz release/*.zip \
+          elif [ "$PRERELEASE" = "true" ]; then
+            gh release create "$VERSION" release/*.tar.gz release/*.zip \
               --target "$GITHUB_SHA" \
               --title "Password Generator $VERSION" \
               --generate-notes \
               --prerelease
-            else
-              gh release create "$VERSION" release/*.tar.gz release/*.zip \
+          else
+            gh release create "$VERSION" release/*.tar.gz release/*.zip \
               --target "$GITHUB_SHA" \
               --title "Password Generator $VERSION" \
               --generate-notes
-            fi
           fi
